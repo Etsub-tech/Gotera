@@ -32,6 +32,14 @@ export async function POST(request: Request) {
       )
     }
 
+    const validRoles: UserRole[] = ['farmer', 'buyer', 'transport']
+    const profileRole = String(role).trim() as UserRole
+    if (!validRoles.includes(profileRole)) {
+      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    }
+
+    console.log('[register] Saving profile with role:', profileRole)
+
     const supabase = createAdminClient()
 
     const { data: authData, error: authError } =
@@ -39,7 +47,7 @@ export async function POST(request: Request) {
         email,
         password,
         email_confirm: true,
-        user_metadata: { name, phone, role },
+        user_metadata: { name, phone, role: profileRole },
       })
 
     if (authError) {
@@ -59,7 +67,7 @@ export async function POST(request: Request) {
       name,
       phone,
       email: body.contactEmail || null,
-      role,
+      role: profileRole,
       location: location || null,
       business_name: businessName || null,
       business_type: businessType || null,
@@ -70,7 +78,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: profileError.message }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, userId: authData.user.id })
+    const { data: savedProfile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', authData.user.id)
+      .single()
+
+    console.log('[register] Profile role in database:', savedProfile?.role)
+
+    return NextResponse.json({
+      success: true,
+      userId: authData.user.id,
+      role: savedProfile?.role ?? profileRole,
+    })
   } catch (err) {
     console.error('Register error:', err)
     return NextResponse.json(

@@ -106,11 +106,37 @@ export default function SignupPage() {
       console.error("[v0] Auto sign-in error:", signInError)
       toast.error("Account created! Please sign in manually.")
       router.push("/auth/login")
+      setIsLoading(false)
+      return
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      toast.error("Account created! Please sign in manually.")
+      router.push("/auth/login")
+      setIsLoading(false)
+      return
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single()
+
+    if (profileError || !profile?.role) {
+      console.error("Profile fetch error:", profileError)
+      toast.error("Account created but could not load your profile. Please sign in.")
+      router.push("/auth/login")
+      setIsLoading(false)
       return
     }
 
     toast.success("Welcome to Gotera!")
-    router.push(`/${selectedRole}`)
+    router.push(`/${profile.role}`)
   }
 
   return (

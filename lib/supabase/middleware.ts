@@ -1,5 +1,17 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import type { UserRole } from '@/lib/types'
+
+const dashboardRoles: UserRole[] = ['farmer', 'buyer', 'transport']
+
+function copySupabaseCookies(
+  from: NextResponse,
+  to: NextResponse,
+) {
+  from.cookies.getAll().forEach(({ name, value }) => {
+    to.cookies.set(name, value)
+  })
+}
 
 export async function updateSession(request: NextRequest) {
   const publicPaths = ['/api/ussd', '/api/auth/register']
@@ -56,7 +68,32 @@ export async function updateSession(request: NextRequest) {
     // no user, redirect to the login page
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
-    return NextResponse.redirect(url)
+    const redirectResponse = NextResponse.redirect(url)
+    copySupabaseCookies(supabaseResponse, redirectResponse)
+    return redirectResponse
+  }
+
+  if (user) {
+    const pathname = request.nextUrl.pathname
+    const visitedDashboard = dashboardRoles.find((role) =>
+      pathname.startsWith(`/${role}`),
+    )
+
+    if (visitedDashboard) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.role && profile.role !== visitedDashboard) {
+        const url = request.nextUrl.clone()
+        url.pathname = `/${profile.role}`
+        const redirectResponse = NextResponse.redirect(url)
+        copySupabaseCookies(supabaseResponse, redirectResponse)
+        return redirectResponse
+      }
+    }
   }
 
   // Redirect logged-in users away from auth pages
@@ -66,10 +103,17 @@ export async function updateSession(request: NextRequest) {
   )
 
   if (isAuthPath && user) {
-    // User is logged in, redirect to home
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
     const url = request.nextUrl.clone()
-    url.pathname = '/'
-    return NextResponse.redirect(url)
+    url.pathname = profile?.role ? `/${profile.role}` : '/'
+    const redirectResponse = NextResponse.redirect(url)
+    copySupabaseCookies(supabaseResponse, redirectResponse)
+    return redirectResponse
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
